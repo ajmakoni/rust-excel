@@ -2,7 +2,7 @@ use rust_xlsxwriter::{Workbook, XlsxError};
 
 #[tokio::main]
 async fn main() {
-    println!("Server started at localhost:8080");
+    println!("Program has started");
     match doexcel().await {
         Ok(_ok) => {
             println!("Excel document successfully generated");
