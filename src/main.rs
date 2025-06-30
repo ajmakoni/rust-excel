@@ -70,7 +70,7 @@ mod tests{
     use crate::doexcel;
 
     #[tokio::test]
-    async fn test_generation_of_excel(){
+    async fn test_successful_generation_of_excel(){
         match doexcel().await {
             Ok(_)=>{
                 println!("Successful")
