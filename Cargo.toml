@@ -4,10 +4,11 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-tokio = { version = "0.2.21", features = ["macros", "rt-threaded", "blocking", "time"] }
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+calamine = "0.31"
+rust_xlsxwriter = "0.94"
 thiserror = "1.0.20"
 chrono = { version = "0.4.13", features = ["serde"] }
-rust_xlsxwriter = "0.88.0"
 uuid = { version = "0.8", features = ["v4"] }
 lazy_static = "=1.4.0"
-
