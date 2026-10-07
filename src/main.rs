@@ -1,12 +1,13 @@
 use calamine::{open_workbook, Reader, Xlsx};
+use std::collections::HashSet;
 use rust_xlsxwriter::{Workbook, XlsxError};
 
 // ================================================================
 // Configuration
 // ================================================================
 
-const INPUT_XLSX_PATH: &str = "/home/user/Downloads/students.xlsx";
-const OUTPUT_XLSX_PATH: &str = "hello.xlsx";
+const INPUT_XLSX_PATH: &str = "/Users/user/Downloads/BIOMETRICS 1.xlsx";
+const OUTPUT_XLSX_PATH: &str = "/Users/user/Downloads/students.xlsx";
 
 //  0  = first sheet
 //  1  = second sheet
@@ -178,8 +179,16 @@ fn doexcelfromlocalpath(
     // First data row.
     let mut output_row = 1u32;
 
-    // Total records processed.
+    // Total unique records written to the output.
     let mut total_count = 0u32;
+
+    // Keep track of email addresses already written.
+    // Emails are normalized (trimmed + lowercase) so that, for example,
+    // John@Example.com and john@example.com are treated as duplicates.
+    let mut seen_emails: HashSet<String> = HashSet::new();
+
+    // Number of duplicate email rows skipped.
+    let mut duplicate_count = 0u32;
 
     // ------------------------------------------------------------
     // Process each selected sheet
@@ -284,15 +293,11 @@ fn doexcelfromlocalpath(
             }
         };
 
-        let surname_col = match surname_col {
-            Some(col) => col,
-            None => {
-                return Err(XlsxError::ParameterError(format!(
-                    "SURNAME column not found in sheet '{}'",
-                    sheet_name
-                )));
-            }
-        };
+        // Some sheets (like sheet 1) have a single "Name" header,
+        // with first name in column A and surname in the adjacent B column.
+        // Use an explicitly named SURNAME column when present; otherwise,
+        // use the column immediately after NAME.
+        let surname_col = surname_col.unwrap_or(name_col + 1);
 
         let student_number_col = match student_number_col {
             Some(col) => col,
@@ -315,7 +320,7 @@ fn doexcelfromlocalpath(
         };
 
         println!(
-            "Columns found: NAME={}, SURNAME={}, STUDENT NUMBER={}, EMAIL={}",
+            "Columns found: NAME={}, SURNAME/adjacent={}, STUDENT NUMBER={}, EMAIL={}",
             name_col,
             surname_col,
             student_number_col,
@@ -329,19 +334,32 @@ fn doexcelfromlocalpath(
         let mut sheet_count = 0u32;
 
         for row in rows {
-            let mut first_name = row
+            let name_value = row
                 .get(name_col)
                 .map(|v| v.to_string())
                 .unwrap_or_default()
                 .trim()
                 .to_string();
 
-            let mut last_name = row
+            let surname_value = row
                 .get(surname_col)
                 .map(|v| v.to_string())
                 .unwrap_or_default()
                 .trim()
                 .to_string();
+
+            // Support both layouts:
+            // 1) NAME | SURNAME (separate named columns)
+            // 2) Name | [blank] (first and surname in adjacent A/B cells,
+            //    or the complete name in A with B empty).
+            let (mut first_name, mut last_name) = if !surname_value.is_empty() {
+                (name_value, surname_value)
+            } else {
+                let mut parts = name_value.split_whitespace();
+                let first = parts.next().unwrap_or("").to_string();
+                let rest = parts.collect::<Vec<_>>().join(" ");
+                (first, rest)
+            };
 
             let mut student_number = row
                 .get(student_number_col)
@@ -356,6 +374,32 @@ fn doexcelfromlocalpath(
                 .unwrap_or_default()
                 .trim()
                 .to_string();
+
+            // ----------------------------------------------------
+            // Remove duplicate email addresses
+            // ----------------------------------------------------
+            //
+            // Only non-empty emails participate in deduplication.
+            // An empty email is allowed because multiple students may
+            // legitimately have no email address.
+            //
+            // The comparison is case-insensitive and ignores surrounding
+            // whitespace. The first occurrence is kept.
+            if !email.is_empty() {
+                let normalized_email = email.to_lowercase();
+
+                if !seen_emails.insert(normalized_email) {
+                    duplicate_count += 1;
+
+                    println!(
+                        "Skipping duplicate email '{}' from sheet '{}'",
+                        email,
+                        sheet_name
+                    );
+
+                    continue;
+                }
+            }
 
             // ----------------------------------------------------
             // Skip completely empty rows
@@ -440,9 +484,13 @@ fn doexcelfromlocalpath(
         "============================================================"
     );
     println!(
-        "Saved {} records to {}",
+        "Saved {} unique records to {}",
         total_count,
         OUTPUT_XLSX_PATH
+    );
+    println!(
+        "Skipped {} duplicate email rows",
+        duplicate_count
     );
     println!(
         "============================================================"
